@@ -11,7 +11,7 @@ FROM runpod/worker-comfyui:5.7.1-base
 # segment-anything, scikit-image, piexif — REQUIRED by Impact-Pack
 # transformers>=4.47, accelerate, sentencepiece, einops — REQUIRED by QwenVL
 RUN pip install --no-cache-dir \
-    insightface \
+    insightface==0.7.3 \
     onnxruntime \
     ultralytics \
     segment-anything \
