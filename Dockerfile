@@ -6,23 +6,43 @@ FROM runpod/worker-comfyui:5.7.1-base
 # fail silently and nodes don't register their class mappings.
 # ============================================================
 
-# Build tools needed to compile insightface==0.7.3 from source
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake && \
-    rm -rf /var/lib/apt/lists/*
-
 # insightface + onnxruntime — REQUIRED by ReActor (most common failure cause)
 # ultralytics — REQUIRED by Impact-Subpack (UltralyticsDetectorProvider)
 # segment-anything, scikit-image, piexif — REQUIRED by Impact-Pack
 # transformers>=4.47, accelerate, sentencepiece, einops — REQUIRED by QwenVL
-# Install insightface build deps first, then insightface separately
-RUN pip install --no-cache-dir Cython "numpy<2" onnx
 
-RUN pip install --no-cache-dir --no-build-isolation insightface==0.7.3
+# Install insightface (latest prebuilt wheel — no compilation needed)
+RUN pip install --no-cache-dir insightface onnxruntime
+
+# Patch: ReActor needs PickableInferenceSession which was removed in newer insightface
+RUN cat > /tmp/patch_insightface.py << 'PYEOF'
+import insightface.model_zoo.model_zoo as mz
+import os
+p = os.path.join(os.path.dirname(mz.__file__), "model_zoo.py")
+with open(p, "r") as f:
+    content = f.read()
+if "PickableInferenceSession" not in content:
+    patch = (
+        "import onnxruntime\n"
+        "class PickableInferenceSession(onnxruntime.InferenceSession):\n"
+        "    def __init__(self, model_path, **kwargs):\n"
+        "        super().__init__(model_path, **kwargs)\n"
+        "        self.model_path = model_path\n"
+        "    def __getstate__(self):\n"
+        '        return {"model_path": self.model_path}\n'
+        "    def __setstate__(self, values):\n"
+        '        self.__init__(values["model_path"])\n\n'
+    )
+    with open(p, "w") as f:
+        f.write(patch + content)
+    print("PATCHED PickableInferenceSession into " + p)
+else:
+    print("Already has PickableInferenceSession")
+PYEOF
+RUN python3 /tmp/patch_insightface.py && rm /tmp/patch_insightface.py
 
 # Other dependencies
 RUN pip install --no-cache-dir \
-    onnxruntime \
     ultralytics \
     segment-anything \
     scikit-image \
