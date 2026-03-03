@@ -2,9 +2,40 @@
 FROM runpod/worker-comfyui:5.7.1-base
 
 # ============================================================
-# STEP 1: Install custom nodes FIRST
-# Let comfy-node-install handle deps however it wants.
-# We force-fix insightface AFTER everything is installed.
+# STEP 1: Install insightface==0.7.3 from prebuilt Linux wheel
+# This is THE fix. Latest insightface removed retinaface module
+# and PickableInferenceSession. We need exactly 0.7.3.
+# Prebuilt wheel = no compilation needed.
+# ============================================================
+
+RUN pip install --no-cache-dir \
+    https://huggingface.co/AlienMachineAI/insightface-0.7.3-cp312-cp312-linux_x86_64.whl/resolve/main/insightface-0.7.3-cp312-cp312-linux_x86_64.whl
+
+# Verify insightface 0.7.3 has what ReActor needs
+RUN python3 -c "\
+from insightface.model_zoo.model_zoo import PickableInferenceSession; \
+from insightface.model_zoo.retinaface import RetinaFace; \
+import insightface; print('insightface', insightface.__version__, 'OK')"
+
+# Other dependencies needed by nodes
+RUN pip install --no-cache-dir \
+    onnxruntime \
+    ultralytics \
+    segment-anything \
+    scikit-image \
+    piexif \
+    numba \
+    dill \
+    blend-modes \
+    accelerate \
+    "transformers>=4.47" \
+    sentencepiece \
+    einops \
+    timm \
+    gguf
+
+# ============================================================
+# STEP 2: Install custom nodes
 # ============================================================
 
 RUN comfy-node-install rgthree-comfy
@@ -31,63 +62,23 @@ RUN SUBPACK_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*impact-subpack
     fi
 
 # ============================================================
-# STEP 2: Force-fix dependencies AFTER all node installs
-# ReActor's install.py tries insightface==0.7.3 which fails
-# to compile, leaving insightface broken. Fix it here.
+# STEP 3: Force-reinstall insightface 0.7.3 AGAIN
+# Because comfy-node-install for reactor runs install.py
+# which may try to install a different insightface version.
+# This ensures 0.7.3 is the final installed version.
 # ============================================================
 
-# Force reinstall latest prebuilt insightface wheel
-RUN pip install --no-cache-dir --force-reinstall insightface onnxruntime
+RUN pip install --no-cache-dir --force-reinstall \
+    https://huggingface.co/AlienMachineAI/insightface-0.7.3-cp312-cp312-linux_x86_64.whl/resolve/main/insightface-0.7.3-cp312-cp312-linux_x86_64.whl
 
-# Write patch script (BuildKit heredoc — no quoting issues)
-COPY <<'PYEOF' /tmp/patch_insightface.py
-import insightface.model_zoo.model_zoo as mz
-import os
-
-p = os.path.join(os.path.dirname(mz.__file__), "model_zoo.py")
-with open(p, "r") as f:
-    content = f.read()
-
-patch = '''import onnxruntime
-class PickableInferenceSession(onnxruntime.InferenceSession):
-    def __init__(self, model_path, **kwargs):
-        super().__init__(model_path, **kwargs)
-        self.model_path = model_path
-    def __getstate__(self):
-        return {"model_path": self.model_path}
-    def __setstate__(self, values):
-        self.__init__(values["model_path"])
-
-'''
-
-with open(p, "w") as f:
-    f.write(patch + content)
-print("PATCHED: " + p)
-PYEOF
-
-RUN python3 /tmp/patch_insightface.py && rm /tmp/patch_insightface.py
-
-# Verify patch — build FAILS if this doesn't work
-RUN python3 -c "from insightface.model_zoo.model_zoo import PickableInferenceSession; print('PickableInferenceSession OK')"
-
-# Remaining dependencies
-RUN pip install --no-cache-dir \
-    ultralytics \
-    segment-anything \
-    scikit-image \
-    piexif \
-    numba \
-    dill \
-    blend-modes \
-    accelerate \
-    "transformers>=4.47" \
-    sentencepiece \
-    einops \
-    timm \
-    gguf
+# Verify AGAIN after all node installs
+RUN python3 -c "\
+from insightface.model_zoo.model_zoo import PickableInferenceSession; \
+from insightface.model_zoo.retinaface import RetinaFace; \
+import insightface; print('FINAL insightface', insightface.__version__, 'OK')"
 
 # ============================================================
-# STEP 3: Download models
+# STEP 4: Download models
 # ============================================================
 
 RUN comfy model download \
@@ -128,7 +119,7 @@ RUN mkdir -p /comfyui/models/insightface/models/buffalo_l && \
     rm -rf buffalo_l.zip buffalo_tmp
 
 # ============================================================
-# STEP 4: Verify everything
+# STEP 5: Verify everything
 # ============================================================
 
 RUN echo "=== Nodes ===" && \
@@ -145,6 +136,3 @@ RUN echo "=== Nodes ===" && \
     test -f /comfyui/models/ultralytics/bbox/face_yolov8m.pt && echo "YOLO OK" && \
     ls /comfyui/models/insightface/models/buffalo_l/*.onnx > /dev/null && echo "buffalo_l OK" && \
     echo "=== ALL OK ==="
-
-# Final check: insightface patch still intact after all pip installs
-RUN python3 -c "from insightface.model_zoo.model_zoo import PickableInferenceSession; print('FINAL: PickableInferenceSession OK')"
