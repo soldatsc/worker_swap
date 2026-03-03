@@ -10,6 +10,9 @@ FROM runpod/worker-comfyui:5.7.1-base
 # ultralytics — REQUIRED by Impact-Subpack (UltralyticsDetectorProvider)
 # segment-anything, scikit-image, piexif — REQUIRED by Impact-Pack
 # transformers>=4.47, accelerate, sentencepiece, einops — REQUIRED by QwenVL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake && \
+    rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir \
     insightface==0.7.3 \
     onnxruntime \
