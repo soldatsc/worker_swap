@@ -2,21 +2,24 @@
 FROM runpod/worker-comfyui:5.7.1-base
 
 # ============================================================
-# STEP 1: Install insightface==0.7.3 from prebuilt Linux wheel
+# STEP 1: Install insightface 0.7.3 from prebuilt wheel
+# This wheel was compiled against numpy 1.x (dtype size=88).
+# We MUST keep numpy <2 throughout the build.
 # ============================================================
-
 RUN pip install --no-cache-dir \
+    "numpy==1.26.4" \
     onnxruntime \
     https://huggingface.co/AlienMachineAI/insightface-0.7.3-cp312-cp312-linux_x86_64.whl/resolve/main/insightface-0.7.3-cp312-cp312-linux_x86_64.whl
 
-# Diagnostic only - never fails build (|| true)
+# Diagnostics (never fail build)
 RUN pip show insightface 2>&1 | head -5 || true
 RUN python3 -c "exec('try:\n import insightface\n print(\"v\"+insightface.__version__)\nexcept Exception as e:\n print(\"FAIL:\",e)')" || true
 RUN python3 -c "exec('try:\n from insightface.model_zoo.retinaface import RetinaFace\n print(\"retinaface OK\")\nexcept Exception as e:\n print(\"retinaface:\",e)')" || true
 RUN python3 -c "exec('try:\n from insightface.model_zoo.model_zoo import PickableInferenceSession\n print(\"Pickable OK\")\nexcept Exception as e:\n print(\"Pickable:\",e)')" || true
-RUN python3 -c "exec('try:\n import insightface.model_zoo as m\n import os\n print(os.listdir(os.path.dirname(m.__file__)))\nexcept Exception as e:\n print(e)')" || true
 
-# Other dependencies
+# ============================================================
+# STEP 2: Other Python deps (before nodes)
+# ============================================================
 RUN pip install --no-cache-dir \
     ultralytics \
     segment-anything \
@@ -33,9 +36,8 @@ RUN pip install --no-cache-dir \
     gguf
 
 # ============================================================
-# STEP 2: Install custom nodes
+# STEP 3: Install custom nodes
 # ============================================================
-
 RUN comfy-node-install rgthree-comfy
 RUN comfy-node-install comfyui-easy-use
 RUN comfy-node-install comfyui-custom-scripts
@@ -48,6 +50,7 @@ RUN comfy-node-install was-node-suite-comfyui
 RUN comfy-node-install comfyui-qwenvl || \
     comfy-node-install https://github.com/1038lab/ComfyUI-QwenVL
 
+# Run install scripts for Impact packs
 RUN IMPACT_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*impact-pack*" -type d | head -1) && \
     if [ -n "$IMPACT_DIR" ] && [ -f "$IMPACT_DIR/install.py" ]; then \
         cd "$IMPACT_DIR" && python install.py; \
@@ -59,20 +62,24 @@ RUN SUBPACK_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*impact-subpack
     fi
 
 # ============================================================
-# STEP 3: Force-reinstall insightface 0.7.3 AGAIN after nodes
+# STEP 4: Force-reinstall insightface 0.7.3 + pin numpy 1.26.4
+# Nodes may have overwritten insightface or upgraded numpy.
+# --no-deps prevents pulling numpy 2.x back.
+# Then we explicitly pin numpy==1.26.4 to match wheel's ABI.
 # ============================================================
-
-RUN pip install --no-cache-dir --force-reinstall \
+RUN pip install --no-cache-dir --no-deps --force-reinstall \
     https://huggingface.co/AlienMachineAI/insightface-0.7.3-cp312-cp312-linux_x86_64.whl/resolve/main/insightface-0.7.3-cp312-cp312-linux_x86_64.whl
 
-# Final diagnostic
+RUN pip install --no-cache-dir "numpy==1.26.4"
+
+# Final diagnostics
 RUN pip show insightface 2>&1 | head -3 || true
 RUN python3 -c "exec('try:\n from insightface.model_zoo.retinaface import RetinaFace\n print(\"FINAL retinaface OK\")\nexcept Exception as e:\n print(\"FINAL retinaface:\",e)')" || true
+RUN python3 -c "exec('try:\n from insightface.model_zoo.model_zoo import PickableInferenceSession\n print(\"FINAL Pickable OK\")\nexcept Exception as e:\n print(\"FINAL Pickable:\",e)')" || true
 
 # ============================================================
-# STEP 4: Download models
+# STEP 5: Download models
 # ============================================================
-
 RUN comfy model download \
     --url https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors \
     --relative-path models/vae \
@@ -103,6 +110,7 @@ RUN comfy model download \
     --relative-path models/ultralytics/bbox \
     --filename face_yolov8m.pt
 
+# buffalo_l face analysis models
 RUN mkdir -p /comfyui/models/insightface/models/buffalo_l && \
     cd /tmp && \
     wget -q https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
@@ -111,9 +119,8 @@ RUN mkdir -p /comfyui/models/insightface/models/buffalo_l && \
     rm -rf buffalo_l.zip buffalo_tmp
 
 # ============================================================
-# STEP 5: Verify nodes and models exist
+# STEP 6: Final verification
 # ============================================================
-
 RUN echo "=== Nodes ===" && \
     ls /comfyui/custom_nodes/ && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*reactor*' -type d | head -1)" && echo "ReActor OK" || (echo "FAIL: ReActor" && exit 1) && \
