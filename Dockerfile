@@ -6,15 +6,22 @@ FROM runpod/worker-comfyui:5.7.1-base
 # fail silently and nodes don't register their class mappings.
 # ============================================================
 
+# Build tools needed to compile insightface==0.7.3 from source
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake && \
+    rm -rf /var/lib/apt/lists/*
+
 # insightface + onnxruntime — REQUIRED by ReActor (most common failure cause)
 # ultralytics — REQUIRED by Impact-Subpack (UltralyticsDetectorProvider)
 # segment-anything, scikit-image, piexif — REQUIRED by Impact-Pack
 # transformers>=4.47, accelerate, sentencepiece, einops — REQUIRED by QwenVL
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake && \
-    rm -rf /var/lib/apt/lists/*
+# Install insightface build deps first, then insightface separately
+RUN pip install --no-cache-dir Cython "numpy<2" onnx
+
+RUN pip install --no-cache-dir --no-build-isolation insightface==0.7.3
+
+# Other dependencies
 RUN pip install --no-cache-dir \
-    insightface==0.7.3 \
     onnxruntime \
     ultralytics \
     segment-anything \
