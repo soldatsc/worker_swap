@@ -9,6 +9,7 @@ FROM runpod/worker-comfyui:5.7.1-base
 # ============================================================
 
 RUN pip install --no-cache-dir \
+    onnxruntime \
     https://huggingface.co/AlienMachineAI/insightface-0.7.3-cp312-cp312-linux_x86_64.whl/resolve/main/insightface-0.7.3-cp312-cp312-linux_x86_64.whl
 
 # Verify insightface 0.7.3 has what ReActor needs
@@ -19,7 +20,6 @@ import insightface; print('insightface', insightface.__version__, 'OK')"
 
 # Other dependencies needed by nodes
 RUN pip install --no-cache-dir \
-    onnxruntime \
     ultralytics \
     segment-anything \
     scikit-image \
