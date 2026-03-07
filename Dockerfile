@@ -43,10 +43,7 @@ RUN comfy-node-install comfyui-easy-use
 RUN comfy-node-install comfyui-custom-scripts
 RUN comfy-node-install comfyui-detail-daemon
 RUN comfy-node-install comfyui-kjnodes
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/art1524/ComfyUI-ReActor-NSFW.git && \
-    cd ComfyUI-ReActor-NSFW && \
-    pip install -r requirements.txt 2>/dev/null || true
+RUN comfy-node-install comfyui-reactor
 RUN comfy-node-install comfyui-impact-pack
 RUN comfy-node-install comfyui-impact-subpack
 RUN comfy-node-install was-node-suite-comfyui
@@ -63,6 +60,19 @@ RUN SUBPACK_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*impact-subpack
     if [ -n "$SUBPACK_DIR" ] && [ -f "$SUBPACK_DIR/install.py" ]; then \
         cd "$SUBPACK_DIR" && python install.py; \
     fi
+
+# ============================================================
+# STEP 3.5: Patch ReActor — disable NSFW filter
+# ============================================================
+RUN REACTOR_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*reactor*" -type d | head -1) && \
+    echo "Patching NSFW in: $REACTOR_DIR" && \
+    find "$REACTOR_DIR" -name "*.py" | xargs grep -l "NSFW" | while read f; do \
+        echo "  Patching: $f" && \
+        sed -i 's/if nsfw_score > /if False and nsfw_score > /g' "$f" && \
+        sed -i 's/if self\.nsfw_score > /if False and self.nsfw_score > /g' "$f" && \
+        sed -i 's/NSFW content detected/NSFW check DISABLED/g' "$f"; \
+    done && \
+    echo "NSFW patch done"
 
 # ============================================================
 # STEP 4: Force-reinstall insightface 0.7.3 + pin numpy 1.26.4
@@ -137,4 +147,7 @@ RUN echo "=== Nodes ===" && \
     test -f /comfyui/models/facerestore_models/codeformer-v0.1.0.pth && echo "CodeFormer OK" && \
     test -f /comfyui/models/ultralytics/bbox/face_yolov8m.pt && echo "YOLO OK" && \
     ls /comfyui/models/insightface/models/buffalo_l/*.onnx > /dev/null && echo "buffalo_l OK" && \
+    echo "=== NSFW patch verify ===" && \
+    REACTOR_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname '*reactor*' -type d | head -1) && \
+    grep -r "if False and nsfw_score" "$REACTOR_DIR" && echo "NSFW PATCH CONFIRMED" || echo "WARNING: patch pattern not found" && \
     echo "=== ALL OK ==="
