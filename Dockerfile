@@ -43,7 +43,10 @@ RUN comfy-node-install comfyui-easy-use
 RUN comfy-node-install comfyui-custom-scripts
 RUN comfy-node-install comfyui-detail-daemon
 RUN comfy-node-install comfyui-kjnodes
-RUN comfy-node-install comfyui-reactor
+RUN cd /comfyui/custom_nodes && \
+    git clone https://github.com/art1524/ComfyUI-ReActor-NSFW.git && \
+    cd ComfyUI-ReActor-NSFW && \
+    pip install -r requirements.txt 2>/dev/null || true
 RUN comfy-node-install comfyui-impact-pack
 RUN comfy-node-install comfyui-impact-subpack
 RUN comfy-node-install was-node-suite-comfyui
