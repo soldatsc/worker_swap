@@ -47,6 +47,7 @@ RUN comfy-node-install comfyui-reactor
 RUN comfy-node-install comfyui-impact-pack
 RUN comfy-node-install comfyui-impact-subpack
 RUN comfy-node-install was-node-suite-comfyui
+RUN comfy-node-install comfyui-art-venture 
 RUN comfy-node-install comfyui-qwenvl || \
     comfy-node-install https://github.com/1038lab/ComfyUI-QwenVL
 
@@ -136,6 +137,7 @@ RUN mkdir -p /comfyui/models/insightface/models/buffalo_l && \
 # ============================================================
 RUN echo "=== Nodes ===" && \
     ls /comfyui/custom_nodes/ && \
+    test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*art-venture*' -type d | head -1)" && echo "ArtVenture OK" || echo "WARNING: ArtVenture not found" && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*reactor*' -type d | head -1)" && echo "ReActor OK" || (echo "FAIL: ReActor" && exit 1) && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*impact-pack*' -type d | head -1)" && echo "Impact Pack OK" || (echo "FAIL: Impact Pack" && exit 1) && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*impact-subpack*' -type d | head -1)" && echo "Impact Subpack OK" || (echo "FAIL: Impact Subpack" && exit 1) && \
