@@ -47,7 +47,8 @@ RUN comfy-node-install comfyui-reactor
 RUN comfy-node-install comfyui-impact-pack
 RUN comfy-node-install comfyui-impact-subpack
 RUN comfy-node-install was-node-suite-comfyui
-RUN comfy-node-install comfyui-art-venture 
+RUN comfy-node-install comfyui-art-venture
+RUN comfy-node-install comfyui-tooling-nodes
 RUN comfy-node-install comfyui-qwenvl || \
     comfy-node-install https://github.com/1038lab/ComfyUI-QwenVL
 
