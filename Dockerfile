@@ -47,7 +47,6 @@ RUN comfy-node-install comfyui-reactor
 RUN comfy-node-install comfyui-impact-pack
 RUN comfy-node-install comfyui-impact-subpack
 RUN comfy-node-install was-node-suite-comfyui
-RUN comfy-node-install comfyui-art-venture
 RUN comfy-node-install comfyui-tooling-nodes
 RUN comfy-node-install comfyui-qwenvl || \
     comfy-node-install https://github.com/1038lab/ComfyUI-QwenVL
@@ -65,15 +64,18 @@ RUN SUBPACK_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*impact-subpack
 
 # ============================================================
 # STEP 3.5: Patch ReActor — disable NSFW filter
+# Fix 1: set SCORE = 1.1 so threshold is never reached
+# Fix 2: symlink correct model path
 # ============================================================
 RUN REACTOR_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*reactor*" -type d | head -1) && \
-    echo "Patching NSFW in: $REACTOR_DIR" && \
-    find "$REACTOR_DIR" -name "*.py" | xargs grep -l "NSFW" | while read f; do \
-        echo "  Patching: $f" && \
-        sed -i 's/if nsfw_score > /if False and nsfw_score > /g' "$f" && \
-        sed -i 's/if self\.nsfw_score > /if False and self.nsfw_score > /g' "$f" && \
-        sed -i 's/NSFW content detected/NSFW check DISABLED/g' "$f"; \
+    echo "Patching ReActor NSFW in: $REACTOR_DIR" && \
+    find "$REACTOR_DIR" -name "reactor_sfw.py" | while read f; do \
+        echo "  Patching score in: $f" && \
+        sed -i 's/SCORE = [0-9.]*/SCORE = 1.1/g' "$f"; \
     done && \
+    mkdir -p "$REACTOR_DIR/models/nsfw_detector/vit-base-nsfw-detector" && \
+    ln -sfn "$REACTOR_DIR/models/nsfw_detector/vit-base-nsfw-detector" \
+            "$REACTOR_DIR/models/nsfw_vit_b_tag" 2>/dev/null || true && \
     echo "NSFW patch done"
 
 # ============================================================
@@ -138,11 +140,10 @@ RUN mkdir -p /comfyui/models/insightface/models/buffalo_l && \
 # ============================================================
 RUN echo "=== Nodes ===" && \
     ls /comfyui/custom_nodes/ && \
-    test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*art-venture*' -type d | head -1)" && echo "ArtVenture OK" || echo "WARNING: ArtVenture not found" && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*reactor*' -type d | head -1)" && echo "ReActor OK" || (echo "FAIL: ReActor" && exit 1) && \
-    test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*art-venture*' -type d | head -1)" && echo "ArtVenture OK" || echo "WARNING: ArtVenture not found" && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*impact-pack*' -type d | head -1)" && echo "Impact Pack OK" || (echo "FAIL: Impact Pack" && exit 1) && \
     test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*impact-subpack*' -type d | head -1)" && echo "Impact Subpack OK" || (echo "FAIL: Impact Subpack" && exit 1) && \
+    test -d "$(find /comfyui/custom_nodes -maxdepth 1 -iname '*tooling*' -type d | head -1)" && echo "Tooling Nodes OK" || echo "WARNING: tooling-nodes not found" && \
     echo "=== Models ===" && \
     test -f /comfyui/models/vae/ae.safetensors && echo "VAE OK" && \
     test -f /comfyui/models/clip/ZIT/qwen_3_4b.safetensors && echo "CLIP OK" && \
@@ -153,5 +154,5 @@ RUN echo "=== Nodes ===" && \
     ls /comfyui/models/insightface/models/buffalo_l/*.onnx > /dev/null && echo "buffalo_l OK" && \
     echo "=== NSFW patch verify ===" && \
     REACTOR_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname '*reactor*' -type d | head -1) && \
-    grep -r "if False and nsfw_score" "$REACTOR_DIR" && echo "NSFW PATCH CONFIRMED" || echo "WARNING: patch pattern not found" && \
+    grep -r "SCORE = 1.1" "$REACTOR_DIR" && echo "NSFW PATCH CONFIRMED" || echo "WARNING: patch not found" && \
     echo "=== ALL OK ==="
