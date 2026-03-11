@@ -69,13 +69,16 @@ RUN SUBPACK_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*impact-subpack
 # ============================================================
 RUN REACTOR_DIR=$(find /comfyui/custom_nodes -maxdepth 1 -iname "*reactor*" -type d | head -1) && \
     echo "Patching ReActor NSFW in: $REACTOR_DIR" && \
-    find "$REACTOR_DIR" -name "reactor_sfw.py" | while read f; do \
-        echo "  Patching score in: $f" && \
-        sed -i 's/SCORE = [0-9.]*/SCORE = 1.1/g' "$f"; \
-    done && \
+    SFW_FILE="$REACTOR_DIR/scripts/reactor_sfw.py" && \
+    echo "--- BEFORE ---" && grep -n "SCORE\|nsfw\|threshold" "$SFW_FILE" || true && \
+    sed -i 's/SCORE = [0-9][0-9.]*/SCORE = 1.1/g' "$SFW_FILE" && \
+    sed -i 's/score > SCORE/score > 999/g' "$SFW_FILE" && \
+    sed -i 's/nsfw_score > /nsfw_score > 999 and nsfw_score > /g' "$SFW_FILE" && \
+    echo "--- AFTER ---" && grep -n "SCORE\|nsfw\|threshold" "$SFW_FILE" || true && \
     mkdir -p "$REACTOR_DIR/models/nsfw_detector/vit-base-nsfw-detector" && \
     ln -sfn "$REACTOR_DIR/models/nsfw_detector/vit-base-nsfw-detector" \
-            "$REACTOR_DIR/models/nsfw_vit_b_tag" 2>/dev/null || true && \
+            "$REACTOR_DIR/models/nsfw_vit_b_tag" && \
+    echo "Symlink: $(ls -la $REACTOR_DIR/models/nsfw_vit_b_tag)" && \
     echo "NSFW patch done"
 
 # ============================================================
